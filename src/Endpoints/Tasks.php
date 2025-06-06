@@ -76,7 +76,7 @@ class Tasks extends Endpoint
 
     private function log(string $message): void
     {
-        if(method_exists("dump")) {
+        if(function_exists("dump")) {
             dump($message);
         } else {
             var_dump($message);
