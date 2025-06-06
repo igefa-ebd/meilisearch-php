@@ -42,20 +42,45 @@ class Tasks extends Endpoint
      */
     public function waitTask($taskUid, int $timeoutInMs, int $intervalInMs): array
     {
+        $intervalInMs = $intervalInMs < 500 ? 500 : $intervalInMs;
+
+        $this->log(date("c") . ' waitTask called with taskUid: ' . $taskUid . ', timeoutInMs: ' . $timeoutInMs . ', intervalInMs: ' . $intervalInMs);
+
         $timeoutTemp = 0;
 
         while ($timeoutInMs > $timeoutTemp) {
-            $res = $this->get($taskUid);
+            try {
+                $res = $this->get($taskUid);
 
-            if ('enqueued' !== $res['status'] && 'processing' !== $res['status']) {
-                return $res;
+                if ('enqueued' !== $res['status'] && 'processing' !== $res['status']) {
+                    $this->log(date("c") . " Task {$taskUid} completed with status: {$res['status']} after {$timeoutTemp} ms");
+
+                    return $res;
+                }
+            } catch (\Throwable $ce) {
+                if(str_starts_with($ce->getMessage(), "Idle timeout reached for")) {
+                    $this->log(date("c") . " Task {$taskUid} after {$timeoutTemp} ms ran into IdleTimeoutReached... retrying.");
+                } else {
+                    throw $ce;
+                }
             }
 
             $timeoutTemp += $intervalInMs;
             usleep(1000 * $intervalInMs);
+
+            $this->log(date("c") . " Iteration done, current timeout: {$timeoutTemp} of {$timeoutInMs} ms");
         }
 
-        throw new TimeOutException();
+        throw new TimeOutException("Task {$taskUid} did not complete within the timeout of {$timeoutInMs} ms, waited {$timeoutTemp} ms - last known status: " . ($res['status'] ?? 'unknown') . ".");
+    }
+
+    private function log(string $message): void
+    {
+        if(method_exists("dump")) {
+            dump($message);
+        } else {
+            var_dump($message);
+        }
     }
 
     /**
